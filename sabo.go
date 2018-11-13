@@ -6,8 +6,10 @@ import (
 	"io"
 	"log"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"runtime"
+	"syscall"
 
 	humanize "github.com/dustin/go-humanize"
 	flags "github.com/jessevdk/go-flags"
@@ -16,6 +18,8 @@ import (
 
 // Version set in compile
 var Version string
+
+const minimumBandwidh = 32 * 1000
 
 type cmdOpts struct {
 	MaxBandWidth string `long:"max-bandwidth" description:"max bandwidth (Bytes/sec)" required:"true"`
@@ -32,7 +36,7 @@ func main() {
 	}
 
 	if opts.Version {
-		fmt.Printf(`motarei %s
+		fmt.Printf(`sabo %s
 Compiler: %s %s
 `,
 			Version,
@@ -44,7 +48,11 @@ Compiler: %s %s
 
 	bw, err := humanize.ParseBytes(opts.MaxBandWidth)
 	if err != nil {
-		fmt.Println("Cannot parse -max-bandwidth", err)
+		log.Printf("Cannot parse -max-bandwidth: %v", err)
+		os.Exit(1)
+	}
+	if bw < minimumBandwidh {
+		log.Printf("max-bandwidth > 32K required: %d", bw)
 		os.Exit(1)
 	}
 
@@ -58,7 +66,14 @@ Compiler: %s %s
 	if err != nil {
 		log.Fatalf("Cannot create initial bandwidth:%s", err)
 	}
-	reader.RunRefresh(ctx)
+	go reader.RunRefresh(ctx)
 
-	io.Copy(os.Stdout, reader)
+	sc := make(chan os.Signal, 1)
+	signal.Notify(sc, syscall.SIGINT, syscall.SIGTERM)
+	go func() {
+		<-sc
+		os.Stdin.Close()
+	}()
+	buf := make([]byte, minimumBandwidh)
+	io.CopyBuffer(os.Stdout, reader, buf)
 }

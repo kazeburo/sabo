@@ -28,7 +28,8 @@ type Reader struct {
 	limiter *rate.Limiter
 	ctx     context.Context
 	mu      *sync.RWMutex
-	lf      *os.File
+	lfh     *os.File
+	lfn     string
 	wd      string
 	bw      uint64
 }
@@ -39,8 +40,10 @@ func NewReaderWithContext(ctx context.Context, r io.Reader, workDir string, bw u
 	if err != nil {
 		return nil, fmt.Errorf("Cannot open workdir: %v", err)
 	}
-	lockfile := fmt.Sprintf("_sabo_%d_%d.lock", bw, os.Getpid())
-	file, err := os.OpenFile(filepath.Join(workDir, lockfile), syscall.O_RDWR|syscall.O_CREAT, 0600)
+	lockfileName := fmt.Sprintf("sabo_%d_%d.lock", bw, os.Getpid())
+	lockfile := filepath.Join(workDir, lockfileName)
+	tmpfile := filepath.Join(workDir, "_"+lockfileName)
+	file, err := os.OpenFile(tmpfile, syscall.O_RDWR|syscall.O_CREAT, 0600)
 	if err != nil {
 		return nil, fmt.Errorf("Cannot create lockfile in workdir: %v", err)
 	}
@@ -49,12 +52,16 @@ func NewReaderWithContext(ctx context.Context, r io.Reader, workDir string, bw u
 	if err != nil {
 		return nil, fmt.Errorf("Cannot lock lockfile in workdir: %v", err)
 	}
-	err = os.Rename(filepath.Join(workDir, lockfile), filepath.Join(workDir, fmt.Sprintf("sabo_%d_%d.lock", bw, os.Getpid())))
+	err = os.Rename(tmpfile, lockfile)
+	if err != nil {
+		return nil, fmt.Errorf("Cannot rename lockfile: %v", err)
+	}
 	return &Reader{
 		r:   r,
 		ctx: ctx,
 		mu:  new(sync.RWMutex),
-		lf:  file,
+		lfh: file,
+		lfn: lockfile,
 		wd:  workDir,
 		bw:  bw,
 	}, nil
@@ -62,8 +69,8 @@ func NewReaderWithContext(ctx context.Context, r io.Reader, workDir string, bw u
 
 // CleanUp clean up lockfile
 func (s *Reader) CleanUp() {
-	defer os.Remove(filepath.Join(s.wd, s.lf.Name()))
-	s.lf.Close()
+	defer os.Remove(s.lfn)
+	s.lfh.Close()
 }
 
 func (s *Reader) getRateLimit() *rate.Limiter {
@@ -83,7 +90,7 @@ func (s *Reader) Read(p []byte) (int, error) {
 	if err != nil {
 		return n, err
 	}
-
+	//log.Printf("read: %d", n)
 	if err := limiter.WaitN(s.ctx, n); err != nil {
 		return n, err
 	}
@@ -102,7 +109,7 @@ func (s *Reader) RefreshLimiter(ctx context.Context) error {
 			continue
 		}
 
-		if m, _ := regexp.MatchString(fmt.Sprintf("^sabo_%d", s.bw), file.Name()); !m {
+		if m, _ := regexp.MatchString(fmt.Sprintf("^sabo_%d_", s.bw), file.Name()); !m {
 			continue
 		}
 
@@ -125,7 +132,7 @@ func (s *Reader) RefreshLimiter(ctx context.Context) error {
 	if locked > 0 {
 		bytesPerSec = float64(s.bw / locked)
 	}
-	fmt.Fprintf(os.Stderr, "new limit %f\n", bytesPerSec)
+	//fmt.Fprintf(os.Stderr, "new limit %f\n", bytesPerSec)
 	limiter := rate.NewLimiter(rate.Limit(bytesPerSec), burstLimit)
 	limiter.AllowN(time.Now(), burstLimit) // spend initial burst
 	s.mu.Lock()
