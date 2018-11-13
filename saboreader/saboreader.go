@@ -1,5 +1,8 @@
 package saboreader
 
+// This code referred shapeio
+// https://github.com/fujiwara/shapeio
+
 import (
 	"context"
 	"fmt"
