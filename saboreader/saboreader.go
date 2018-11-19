@@ -135,9 +135,9 @@ func (s *Reader) RefreshLimiter(ctx context.Context) error {
 	if locked > 0 {
 		bytesPerSec = float64(s.bw / locked)
 	}
-	//fmt.Fprintf(os.Stderr, "new limit %f\n", bytesPerSec)
+	// fmt.Fprintf(os.Stderr, "new limit %f\n", bytesPerSec)
 	limiter := rate.NewLimiter(rate.Limit(bytesPerSec), burstLimit)
-	limiter.AllowN(time.Now(), burstLimit) // spend initial burst
+	// limiter.AllowN(time.Now(), burstLimit) // spend initial burst
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.limiter = limiter
