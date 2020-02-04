@@ -9,6 +9,7 @@ import (
 	"io"
 	"io/ioutil"
 	"log"
+	"math"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -18,8 +19,6 @@ import (
 
 	"golang.org/x/time/rate"
 )
-
-const burstLimit = 1000 * 1000 * 1000
 
 const (
 	refreshInterval = 1
@@ -93,7 +92,7 @@ func (s *Reader) Read(p []byte) (int, error) {
 	if err != nil {
 		return n, err
 	}
-	//log.Printf("read: %d", n)
+	// log.Printf("read: %d", n)
 	if err := limiter.WaitN(s.ctx, n); err != nil {
 		return n, err
 	}
@@ -135,11 +134,19 @@ func (s *Reader) RefreshLimiter(ctx context.Context) error {
 	if locked > 0 {
 		bytesPerSec = float64(s.bw / locked)
 	}
-	// fmt.Fprintf(os.Stderr, "new limit %f\n", bytesPerSec)
-	limiter := rate.NewLimiter(rate.Limit(bytesPerSec), burstLimit)
-	// limiter.AllowN(time.Now(), burstLimit) // spend initial burst
+	l := rate.Limit(bytesPerSec)
+	b := int(math.Ceil(bytesPerSec))
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
+	if s.limiter != nil && l == s.limiter.Limit() {
+		return nil
+	}
+
+	// fmt.Fprintf(os.Stderr, "new limit %f\n", bytesPerSec)
+	limiter := rate.NewLimiter(l, b)
+	limiter.AllowN(time.Now(), b)
 	s.limiter = limiter
 	return nil
 }
