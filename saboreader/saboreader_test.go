@@ -77,11 +77,17 @@ func TestMultiRead(t *testing.T) {
 	ctx := context.Background()
 	for _, limit := range rates {
 		var wg sync.WaitGroup
-		for j := range srcSizes {
+		srcs := [][]byte{
+			bytes.Repeat([]byte{0}, 400*1000),
+			bytes.Repeat([]byte{0}, 400*1000),
+			bytes.Repeat([]byte{0}, 400*1000),
+			bytes.Repeat([]byte{0}, 400*1000),
+		}
+		for j, src := range srcs {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
-				src := bytes.NewReader(bytes.Repeat([]byte{0}, 400*1000))
+				src := bytes.NewReader(src)
 				testSimpleReader(ctx, t, dir, src, limit, j, len(srcSizes))
 			}()
 		}
