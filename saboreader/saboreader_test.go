@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"context"
 	"io"
-	"sync"
+	"math/rand"
 	"testing"
 	"time"
 
@@ -18,20 +18,19 @@ var rates = []string{
 	"50M",  // 50MB/sec
 }
 
-var srcSizes = []int{
-	64 * 1000,
-	256 * 1000,
-	1024 * 1000,
+var srcs = []*bytes.Reader{
+	bytes.NewReader(bytes.Repeat([]byte{0}, 64*1000)),
+	bytes.NewReader(bytes.Repeat([]byte{0}, 256*1000)),
+	bytes.NewReader(bytes.Repeat([]byte{0}, 1024*1000)),
 }
 
-func testSimpleReader(ctx context.Context, t *testing.T, dir string, src *bytes.Reader, limit string, identifier int, para int) {
+func testSimpleReader(ctx context.Context, t *testing.T, dir string, src *bytes.Reader, limit string, para int) {
 	bw, _ := humanize.ParseBytes(limit)
 	reader, err := NewReaderWithContext(
 		ctx,
 		src,
 		dir,
 		bw,
-		identifier,
 	)
 	if err != nil {
 		t.Error(err)
@@ -55,7 +54,7 @@ func testSimpleReader(ctx context.Context, t *testing.T, dir string, src *bytes.
 		humanize.Bytes(uint64(expRate)),
 		realRate/expRate*100,
 	)
-	if realRate*0.7 > expRate {
+	if realRate*0.9 > expRate {
 		t.Errorf("limit %0.3f but real rate %0.3f", expRate, realRate)
 		return
 	}
@@ -65,10 +64,10 @@ func testSimpleReader(ctx context.Context, t *testing.T, dir string, src *bytes.
 func TestSimpleRead(t *testing.T) {
 	dir := t.TempDir()
 	ctx := context.Background()
-	for _, srcSize := range srcSizes {
+	for _, src := range srcs {
 		for _, limit := range rates {
-			src := bytes.NewReader(bytes.Repeat([]byte{0}, srcSize))
-			testSimpleReader(ctx, t, dir, src, limit, 1, 1)
+			src.Seek(0, 0)
+			testSimpleReader(ctx, t, dir, src, limit, 1)
 		}
 	}
 }
@@ -77,20 +76,29 @@ func TestMultiRead(t *testing.T) {
 	dir := t.TempDir()
 	ctx := context.Background()
 	for _, limit := range rates {
-		var wg sync.WaitGroup
-		srcs := []*bytes.Reader{
-			bytes.NewReader(bytes.Repeat([]byte{0}, 400*1000)),
-			bytes.NewReader(bytes.Repeat([]byte{0}, 400*1000)),
-			//bytes.NewReader(bytes.Repeat([]byte{0}, 400*1000)),
-			//bytes.NewReader(bytes.Repeat([]byte{0}, 400*1000)),
+		bw, _ := humanize.ParseBytes(limit)
+		var readers []*Reader
+		p := rand.Intn(3) + 1
+		d := bytes.NewReader(bytes.Repeat([]byte{0}, 10))
+		for i := 0; i < p; i++ {
+			reader, err := NewReaderWithContext(
+				ctx,
+				d,
+				dir,
+				bw,
+			)
+			if err != nil {
+				t.Error(err)
+				return
+			}
+			readers = append(readers, reader)
 		}
-		for j, src := range srcs {
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
-				testSimpleReader(ctx, t, dir, src, limit, j, len(srcs))
-			}()
+		for _, src := range srcs {
+			src.Seek(0, 0)
+			testSimpleReader(ctx, t, dir, src, limit, p+1)
 		}
-		wg.Wait()
+		for _, reader := range readers {
+			reader.CleanUp()
+		}
 	}
 }

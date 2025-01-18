@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
+	"github.com/rs/xid"
 	"golang.org/x/time/rate"
 )
 
@@ -38,12 +39,13 @@ type Reader struct {
 }
 
 // NewReaderWithContext returns a reader that implements io.Reader with rate limiting.
-func NewReaderWithContext(ctx context.Context, r io.Reader, workDir string, bw uint64, identifier int) (*Reader, error) {
+func NewReaderWithContext(ctx context.Context, r io.Reader, workDir string, bw uint64) (*Reader, error) {
 	_, err := os.ReadDir(workDir)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not open workdir")
 	}
-	lockfileName := fmt.Sprintf("sabo_%d_%d.lock", bw, identifier)
+	guid := xid.New()
+	lockfileName := fmt.Sprintf("sabo_%d_%d_%s.lock", bw, os.Getpid(), guid.String())
 	lockfile := filepath.Join(workDir, lockfileName)
 	tmpfile := filepath.Join(workDir, "_"+lockfileName)
 	file, err := os.OpenFile(tmpfile, syscall.O_RDWR|syscall.O_CREAT, 0600)

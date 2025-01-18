@@ -61,7 +61,7 @@ func _main() int {
 	}
 
 	ctx := context.Background()
-	reader, err := saboreader.NewReaderWithContext(ctx, os.Stdin, filepath.Clean(opts.WorkDir), bw, os.Getpid())
+	reader, err := saboreader.NewReaderWithContext(ctx, os.Stdin, filepath.Clean(opts.WorkDir), bw)
 	if err != nil {
 		log.Fatalf("Cannot create reader:%s", err)
 	}
