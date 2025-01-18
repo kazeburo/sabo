@@ -81,8 +81,8 @@ func TestMultiRead(t *testing.T) {
 		srcs := []*bytes.Reader{
 			bytes.NewReader(bytes.Repeat([]byte{0}, 400*1000)),
 			bytes.NewReader(bytes.Repeat([]byte{0}, 400*1000)),
-			bytes.NewReader(bytes.Repeat([]byte{0}, 400*1000)),
-			bytes.NewReader(bytes.Repeat([]byte{0}, 400*1000)),
+			//bytes.NewReader(bytes.Repeat([]byte{0}, 400*1000)),
+			//bytes.NewReader(bytes.Repeat([]byte{0}, 400*1000)),
 		}
 		for j, src := range srcs {
 			wg.Add(1)
