@@ -7,7 +7,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"math"
 	"os"
@@ -17,6 +16,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/pkg/errors"
 	"golang.org/x/time/rate"
 )
 
@@ -29,6 +29,7 @@ type Reader struct {
 	r       io.Reader
 	limiter *rate.Limiter
 	ctx     context.Context
+	ticker  *time.Ticker
 	mu      *sync.RWMutex
 	lfh     *os.File
 	lfn     string
@@ -37,40 +38,51 @@ type Reader struct {
 }
 
 // NewReaderWithContext returns a reader that implements io.Reader with rate limiting.
-func NewReaderWithContext(ctx context.Context, r io.Reader, workDir string, bw uint64) (*Reader, error) {
-	_, err := ioutil.ReadDir(workDir)
+func NewReaderWithContext(ctx context.Context, r io.Reader, workDir string, bw uint64, identifier int) (*Reader, error) {
+	_, err := os.ReadDir(workDir)
 	if err != nil {
-		return nil, fmt.Errorf("Cannot open workdir: %v", err)
+		return nil, errors.Wrap(err, "could not open workdir")
 	}
-	lockfileName := fmt.Sprintf("sabo_%d_%d.lock", bw, os.Getpid())
+	lockfileName := fmt.Sprintf("sabo_%d_%d.lock", bw, identifier)
 	lockfile := filepath.Join(workDir, lockfileName)
 	tmpfile := filepath.Join(workDir, "_"+lockfileName)
 	file, err := os.OpenFile(tmpfile, syscall.O_RDWR|syscall.O_CREAT, 0600)
 	if err != nil {
-		return nil, fmt.Errorf("Cannot create lockfile in workdir: %v", err)
+		return nil, errors.Wrap(err, "could not create lockfile in workdir")
 	}
 
 	err = syscall.Flock(int(file.Fd()), syscall.LOCK_EX|syscall.LOCK_NB)
 	if err != nil {
-		return nil, fmt.Errorf("Cannot lock lockfile in workdir: %v", err)
+		return nil, errors.Wrap(err, "could not lock lockfile in workdir")
 	}
 	err = os.Rename(tmpfile, lockfile)
 	if err != nil {
-		return nil, fmt.Errorf("Cannot rename lockfile: %v", err)
+		return nil, errors.Wrap(err, "could not rename lockfile")
 	}
-	return &Reader{
-		r:   r,
-		ctx: ctx,
-		mu:  new(sync.RWMutex),
-		lfh: file,
-		lfn: lockfile,
-		wd:  workDir,
-		bw:  bw,
-	}, nil
+	ticker := time.NewTicker(refreshInterval * time.Second)
+	reader := &Reader{
+		r:      r,
+		ctx:    ctx,
+		ticker: ticker,
+		mu:     new(sync.RWMutex),
+		lfh:    file,
+		lfn:    lockfile,
+		wd:     workDir,
+		bw:     bw,
+	}
+	err = reader.refreshLimiter()
+	if err != nil {
+		reader.CleanUp()
+		return nil, err
+	}
+	go reader.runRefresh()
+
+	return reader, err
 }
 
 // CleanUp clean up lockfile
 func (s *Reader) CleanUp() {
+	s.ticker.Stop()
 	defer os.Remove(s.lfn)
 	s.lfh.Close()
 }
@@ -99,11 +111,10 @@ func (s *Reader) Read(p []byte) (int, error) {
 	return n, nil
 }
 
-// RefreshLimiter refresh limiter
-func (s *Reader) RefreshLimiter(ctx context.Context) error {
-	files, err := ioutil.ReadDir(s.wd)
+func (s *Reader) refreshLimiter() error {
+	files, err := os.ReadDir(s.wd)
 	if err != nil {
-		return fmt.Errorf("Cannot open workdir: %v", err)
+		return errors.Wrap(err, "Cannot open workdir")
 	}
 	locked := uint64(0)
 	for _, file := range files {
@@ -151,16 +162,13 @@ func (s *Reader) RefreshLimiter(ctx context.Context) error {
 	return nil
 }
 
-// RunRefresh refresh limiter regularly
-func (s *Reader) RunRefresh(ctx context.Context) {
-	ticker := time.NewTicker(refreshInterval * time.Second)
-	defer ticker.Stop()
+func (s *Reader) runRefresh() {
 	for {
 		select {
-		case <-ctx.Done():
+		case <-s.ctx.Done():
 			return
-		case _ = <-ticker.C:
-			err := s.RefreshLimiter(ctx)
+		case <-s.ticker.C:
+			err := s.refreshLimiter()
 			if err != nil {
 				log.Printf("Regularly refresh limiter failed:%v", err)
 			}

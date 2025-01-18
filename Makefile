@@ -1,14 +1,9 @@
-VERSION=0.0.3
-LDFLAGS=-ldflags "-X main.Version=${VERSION}"
+VERSION=0.4.3
+LDFLAGS=-ldflags "-w -s -X main.version=${VERSION}"
+
 all: sabo
 
 .PHONY: sabo
-
-bundle:
-	dep ensure
-
-update:
-	dep ensure -update
 
 sabo: sabo.go
 	go build $(LDFLAGS) -o sabo
@@ -16,14 +11,13 @@ sabo: sabo.go
 linux: sabo.go
 	GOOS=linux GOARCH=amd64 go build $(LDFLAGS) -o sabo
 
+check:
+	go test ./...
+
 fmt:
 	go fmt ./...
-
-clean:
-	rm -rf sabo
 
 tag:
 	git tag v${VERSION}
 	git push origin v${VERSION}
 	git push origin master
-	goreleaser --rm-dist

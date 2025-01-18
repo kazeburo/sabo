@@ -17,7 +17,7 @@ import (
 )
 
 // Version set in compile
-var Version string
+var version string
 
 const minimumBandwidh = 32 * 1000
 
@@ -27,46 +27,45 @@ type cmdOpts struct {
 	Version      bool   `short:"v" long:"version" description:"Show version"`
 }
 
-func main() {
-	opts := cmdOpts{}
-	psr := flags.NewParser(&opts, flags.Default)
-	_, err := psr.Parse()
-	if err != nil {
-		os.Exit(1)
-	}
-
-	if opts.Version {
-		fmt.Printf(`sabo %s
+func printVersion() {
+	fmt.Printf(`%s %s
 Compiler: %s %s
 `,
-			Version,
-			runtime.Compiler,
-			runtime.Version())
-		return
+		os.Args[0],
+		version,
+		runtime.Compiler,
+		runtime.Version())
+}
 
+func _main() int {
+	opts := cmdOpts{}
+	psr := flags.NewParser(&opts, flags.HelpFlag|flags.PassDoubleDash)
+	_, err := psr.Parse()
+	if opts.Version {
+		printVersion()
+		return 0
+	}
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%v\n", err)
+		return 1
 	}
 
 	bw, err := humanize.ParseBytes(opts.MaxBandWidth)
 	if err != nil {
 		log.Printf("Cannot parse -max-bandwidth: %v", err)
-		os.Exit(1)
+		return 1
 	}
 	if bw < minimumBandwidh {
 		log.Printf("max-bandwidth > 32K required: %d", bw)
-		os.Exit(1)
+		return 1
 	}
 
 	ctx := context.Background()
-	reader, err := saboreader.NewReaderWithContext(ctx, os.Stdin, filepath.Clean(opts.WorkDir), bw)
+	reader, err := saboreader.NewReaderWithContext(ctx, os.Stdin, filepath.Clean(opts.WorkDir), bw, os.Getpid())
 	if err != nil {
 		log.Fatalf("Cannot create reader:%s", err)
 	}
 	defer reader.CleanUp()
-	err = reader.RefreshLimiter(ctx)
-	if err != nil {
-		log.Fatalf("Cannot create initial bandwidth:%s", err)
-	}
-	go reader.RunRefresh(ctx)
 
 	sc := make(chan os.Signal, 1)
 	signal.Notify(sc, syscall.SIGINT, syscall.SIGTERM)
@@ -75,5 +74,13 @@ Compiler: %s %s
 		os.Stdin.Close()
 	}()
 	buf := make([]byte, minimumBandwidh)
-	io.CopyBuffer(os.Stdout, reader, buf)
+	_, err = io.CopyBuffer(os.Stdout, reader, buf)
+	if err != nil {
+		log.Printf("%v", err)
+	}
+	return 0
+}
+
+func main() {
+	os.Exit(_main())
 }
