@@ -38,6 +38,7 @@ func testSimpleReader(ctx context.Context, t *testing.T, dir string, src *bytes.
 		return
 	}
 	defer reader.CleanUp()
+	time.After(100 * time.Millisecond)
 	start := time.Now()
 	n, err := io.Copy(io.Discard, reader)
 	if err != nil {
@@ -47,7 +48,7 @@ func testSimpleReader(ctx context.Context, t *testing.T, dir string, src *bytes.
 	elapsed := time.Since(start)
 	realRate := float64(n) / elapsed.Seconds()
 	expRate := float64(bw) / float64(para)
-	if realRate*0.90 > expRate {
+	if realRate*0.95 > expRate {
 		t.Errorf("limit %0.3f but real rate %0.3f", expRate, realRate)
 		return
 	}
@@ -77,17 +78,16 @@ func TestMultiRead(t *testing.T) {
 	ctx := context.Background()
 	for _, limit := range rates {
 		var wg sync.WaitGroup
-		srcs := [][]byte{
-			bytes.Repeat([]byte{0}, 400*1000),
-			bytes.Repeat([]byte{0}, 400*1000),
-			bytes.Repeat([]byte{0}, 400*1000),
-			bytes.Repeat([]byte{0}, 400*1000),
+		srcs := []*bytes.Reader{
+			bytes.NewReader(bytes.Repeat([]byte{0}, 400*1000)),
+			bytes.NewReader(bytes.Repeat([]byte{0}, 400*1000)),
+			bytes.NewReader(bytes.Repeat([]byte{0}, 400*1000)),
+			bytes.NewReader(bytes.Repeat([]byte{0}, 400*1000)),
 		}
 		for j, src := range srcs {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
-				src := bytes.NewReader(src)
 				testSimpleReader(ctx, t, dir, src, limit, j, len(srcSizes))
 			}()
 		}
