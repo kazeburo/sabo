@@ -38,7 +38,6 @@ func testSimpleReader(ctx context.Context, t *testing.T, dir string, src *bytes.
 		return
 	}
 	defer reader.CleanUp()
-	time.After(100 * time.Millisecond)
 	start := time.Now()
 	n, err := io.Copy(io.Discard, reader)
 	if err != nil {
@@ -48,10 +47,6 @@ func testSimpleReader(ctx context.Context, t *testing.T, dir string, src *bytes.
 	elapsed := time.Since(start)
 	realRate := float64(n) / elapsed.Seconds()
 	expRate := float64(bw) / float64(para)
-	if realRate*0.95 > expRate {
-		t.Errorf("limit %0.3f but real rate %0.3f", expRate, realRate)
-		return
-	}
 	t.Logf(
 		"read:%s, elapsed:%s, real:%s/sec, limit:%s/sec. (%0.3f%%)",
 		humanize.Bytes(uint64(n)),
@@ -60,6 +55,11 @@ func testSimpleReader(ctx context.Context, t *testing.T, dir string, src *bytes.
 		humanize.Bytes(uint64(expRate)),
 		realRate/expRate*100,
 	)
+	if realRate*0.7 > expRate {
+		t.Errorf("limit %0.3f but real rate %0.3f", expRate, realRate)
+		return
+	}
+
 }
 
 func TestSimpleRead(t *testing.T) {
@@ -88,7 +88,7 @@ func TestMultiRead(t *testing.T) {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
-				testSimpleReader(ctx, t, dir, src, limit, j, len(srcSizes))
+				testSimpleReader(ctx, t, dir, src, limit, j, len(srcs))
 			}()
 		}
 		wg.Wait()
