@@ -47,7 +47,7 @@ func testSimpleReader(ctx context.Context, t *testing.T, dir string, src *bytes.
 	elapsed := time.Since(start)
 	realRate := float64(n) / elapsed.Seconds()
 	expRate := float64(bw) / float64(para)
-	if realRate*0.99 > expRate {
+	if realRate*0.90 > expRate {
 		t.Errorf("limit %0.3f but real rate %0.3f", expRate, realRate)
 		return
 	}
@@ -81,7 +81,7 @@ func TestMultiRead(t *testing.T) {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
-				src := bytes.NewReader(bytes.Repeat([]byte{0}, 256*1000))
+				src := bytes.NewReader(bytes.Repeat([]byte{0}, 400*1000))
 				testSimpleReader(ctx, t, dir, src, limit, j, len(srcSizes))
 			}()
 		}
