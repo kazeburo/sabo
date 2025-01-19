@@ -1,4 +1,4 @@
-package saboreader
+package sabo
 
 // This code referred shapeio
 // https://github.com/fujiwara/shapeio

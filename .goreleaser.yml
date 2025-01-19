@@ -1,5 +1,6 @@
 builds:
   - binary: sabo
+    main: ./cmd/sabo
     goos:
       - darwin
       - linux

@@ -1,4 +1,4 @@
-package saboreader
+package sabo
 
 import (
 	"bytes"

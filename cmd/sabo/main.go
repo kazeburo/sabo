@@ -13,7 +13,7 @@ import (
 
 	humanize "github.com/dustin/go-humanize"
 	flags "github.com/jessevdk/go-flags"
-	"github.com/kazeburo/sabo/saboreader"
+	"github.com/kazeburo/sabo"
 )
 
 // Version set in compile
@@ -61,7 +61,7 @@ func _main() int {
 	}
 
 	ctx := context.Background()
-	reader, err := saboreader.NewReaderWithContext(ctx, os.Stdin, filepath.Clean(opts.WorkDir), bw)
+	reader, err := sabo.NewReaderWithContext(ctx, os.Stdin, filepath.Clean(opts.WorkDir), bw)
 	if err != nil {
 		log.Fatalf("Cannot create reader:%s", err)
 	}

@@ -5,11 +5,11 @@ all: sabo
 
 .PHONY: sabo
 
-sabo: sabo.go
-	go build $(LDFLAGS) -o sabo
+sabo: cmd/sabo/main.go
+	go build $(LDFLAGS) -o sabo cmd/sabo/main.go
 
-linux: sabo.go
-	GOOS=linux GOARCH=amd64 go build $(LDFLAGS) -o sabo
+linux: cmd/sabo/main.go
+	GOOS=linux GOARCH=amd64 go build $(LDFLAGS) -o sabo cmd/sabo/main.go
 
 check:
 	go test ./...
