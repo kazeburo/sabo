@@ -23,7 +23,7 @@ _testmain.go
 *.test
 *.prof
 
-sabo
+/sabo
 vendor/
 dist/
 foo/
